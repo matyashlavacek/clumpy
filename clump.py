@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
+import copy
 import json
 import time
 
@@ -12,9 +13,21 @@ routes = web.RouteTableDef()
 
 @routes.get('/')
 async def handle(request):
+    since = request.query.get('since')
+    if not since:
+        return web.Response(status=400, text='Missing "since" url parameter')
+    try:
+        since = int(since)
+    except ValueError:
+        return web.Response(status=400, text='Could not parse "since" as int')
+    raw = {}
     async with request.app['lock']:
-        playload = json.dumps(request.app['m'])
-    return web.Response(status=200, text=playload)
+        for k, v in request.app['m'].items():
+            if k >= since:
+                raw[k] = copy.deepcopy(v)  # I fear this will be slow
+    payload = json.dumps(raw)
+    return web.Response(
+        status=200, text=payload, content_type='application/json')
 
 
 async def monitor(app):
@@ -28,6 +41,7 @@ async def monitor(app):
             if now % 1 < deviation:
                 key = int(now)
                 # don't waste cycles inside a lock
+                # also calculate immediately (in case lock would block a bit)
                 cpu = resources.cpu_usage()
                 mem = resources.memory_usage()
                 disk = disk_usage()
