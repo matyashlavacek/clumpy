@@ -47,6 +47,7 @@ async def monitor(app):
                 disk = disk_usage()
                 net = network_usage()
                 async with app['lock']:
+                    app['latest'] = key
                     app['m'][key] = {
                         'cpu': cpu,
                         'memory': mem,
@@ -59,20 +60,40 @@ async def monitor(app):
         pass
 
 
-async def start_monitor(app):
+async def cleanup(app):
+    # not the prettiest but does the job
+    keep_records = 10
+    cleanup_every = 5
+    try:
+        while True:
+            async with app['lock']:
+                if len(app['m']) > keep_records:
+                    for k, v in app['m'].copy().items():
+                        if k <= app['latest']-keep_records:
+                            del app['m'][k]
+            await asyncio.sleep(cleanup_every)
+    except asyncio.CancelledError:
+        pass
+
+
+async def start_tasks(app):
     app['monitor'] = asyncio.create_task(monitor(app))
+    app['cleanup'] = asyncio.create_task(cleanup(app))
 
 
-async def stop_monitor(app):
+async def stop_tasks(app):
     app['monitor'].cancel()
     await app['monitor']
+    app['cleanup'].cancel()
+    await app['cleanup']
 
 
 if __name__ == '__main__':
     app = web.Application()
+    app['latest'] = 0
     app['m'] = {}
     app['lock'] = asyncio.Lock()
     app.add_routes(routes)
-    app.on_startup.append(start_monitor)
-    app.on_cleanup.append(stop_monitor)
+    app.on_startup.append(start_tasks)
+    app.on_cleanup.append(stop_tasks)
     web.run_app(app)
