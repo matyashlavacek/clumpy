@@ -22,7 +22,7 @@ async def handle(request):
         return web.Response(status=400, text='Could not parse "since" as int')
     raw = {}
     async with request.app['lock']:
-        for k, v in request.app['m'].items():
+        for k, v in request.app['resources'].items():
             if k >= since:
                 raw[k] = copy.deepcopy(v)  # I fear this will be slow
     payload = json.dumps(raw)
@@ -47,8 +47,8 @@ async def monitor(app):
                 disk = disk_usage()
                 net = network_usage()
                 async with app['lock']:
-                    app['latest'] = key
-                    app['m'][key] = {
+                    app['info']['latest'] = key
+                    app['resources'][key] = {
                         'cpu': cpu,
                         'memory': mem,
                         'disk': disk,
@@ -67,10 +67,10 @@ async def cleanup(app):
     try:
         while True:
             async with app['lock']:
-                if len(app['m']) > keep_records:
-                    for k, v in app['m'].copy().items():
-                        if k <= app['latest']-keep_records:
-                            del app['m'][k]
+                if len(app['resources']) > keep_records:
+                    for k, v in app['resources'].copy().items():
+                        if k <= app['info']['latest']-keep_records:
+                            del app['resources'][k]
             await asyncio.sleep(cleanup_every)
     except asyncio.CancelledError:
         pass
@@ -90,8 +90,8 @@ async def stop_tasks(app):
 
 if __name__ == '__main__':
     app = web.Application()
-    app['latest'] = 0
-    app['m'] = {}
+    app['info'] = {'latest': 0}
+    app['resources'] = {}
     app['lock'] = asyncio.Lock()
     app.add_routes(routes)
     app.on_startup.append(start_tasks)
