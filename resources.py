@@ -21,7 +21,7 @@ def cpu_usage():
 def memory_usage():
     v = psutil.virtual_memory()
     return {
-        'usedGB': round(v.used/1024/1024/1024*100)/100,
+        'usedBytes': v.used,
         'usedPercent': v.percent}
 
 
