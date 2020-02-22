@@ -86,7 +86,7 @@ async def start_tasks(app):
 
 
 async def cancel_tasks(app):
-    pending = asyncio.Task.all_tasks()
+    pending = asyncio.all_tasks()
     for task in pending:
         task.cancel()
         await task
