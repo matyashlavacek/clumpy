@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import asyncio
 import copy
 import json
@@ -32,8 +33,8 @@ async def handle(request):
 
 async def cleanup(app):
     # not the prettiest but does the job
-    keep_records = 10
-    cleanup_every = 5
+    keep_records = app['args'].keep_records
+    cleanup_interval = app['args'].cleanup_interval
     try:
         while True:
             async with app['lock']:
@@ -41,7 +42,7 @@ async def cleanup(app):
                     for k, v in app['resources'].copy().items():
                         if k <= app['info']['latest']-keep_records:
                             del app['resources'][k]
-            await asyncio.sleep(cleanup_every)
+            await asyncio.sleep(cleanup_interval)
     except asyncio.CancelledError:
         pass
 
@@ -91,8 +92,17 @@ async def cancel_tasks(app):
         await task
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--keep-records', type=int, default=3600)
+    parser.add_argument('--cleanup-interval', type=int, default=60)
+    return parser.parse_args()  # TODO: sanitize input before returning
+
+
 if __name__ == '__main__':
+    args = parse_arguments()
     app = web.Application()
+    app['args'] = args
     app['info'] = {'latest': 0}
     app['resources'] = {}
     app['lock'] = asyncio.Lock()
