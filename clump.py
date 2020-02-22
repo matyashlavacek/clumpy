@@ -30,36 +30,6 @@ async def handle(request):
         status=200, text=payload, content_type='application/json')
 
 
-async def monitor(app):
-    disk_usage = resources.disk_usage_fn()
-    network_usage = resources.network_usage_fn()
-    deviation = 0.01
-    try:
-        while True:
-            now = time.time()
-            # check if we're on the second (approximately)
-            if now % 1 < deviation:
-                key = int(now)
-                # don't waste cycles inside a lock
-                # also calculate immediately (in case lock would block a bit)
-                cpu = resources.cpu_usage()
-                mem = resources.memory_usage()
-                disk = disk_usage()
-                net = network_usage()
-                async with app['lock']:
-                    app['info']['latest'] = key
-                    app['resources'][key] = {
-                        'cpu': cpu,
-                        'memory': mem,
-                        'disk': disk,
-                        'network': net}
-                # make sure we don't run twice in the same second
-                await asyncio.sleep(deviation)
-            await asyncio.sleep(1/200)
-    except asyncio.CancelledError:
-        pass
-
-
 async def cleanup(app):
     # not the prettiest but does the job
     keep_records = 10
@@ -76,16 +46,49 @@ async def cleanup(app):
         pass
 
 
+async def monitor(now, disk_usage, network_usage, app):
+    try:
+        key = int(now)
+        cpu = resources.cpu_usage()
+        mem = resources.memory_usage()
+        disk = disk_usage()
+        net = network_usage()
+        async with app['lock']:
+            app['info']['latest'] = key
+            app['resources'][key] = {
+                'cpu': cpu,
+                'memory': mem,
+                'disk': disk,
+                'network': net}
+    except asyncio.CancelledError:
+        pass
+
+
+async def cron(app):
+    try:
+        # sleep till almost exactly on the second #good_enough
+        await asyncio.sleep(1 - (time.time() % 1))
+        disk_usage = resources.disk_usage_fn()
+        network_usage = resources.network_usage_fn()
+        await asyncio.sleep(1 - (time.time() % 1))
+        while True:
+            now = time.time()
+            asyncio.create_task(monitor(now, disk_usage, network_usage, app))
+            await asyncio.sleep(1 - (now % 1))
+    except asyncio.CancelledError:
+        pass
+
+
 async def start_tasks(app):
-    app['monitor'] = asyncio.create_task(monitor(app))
-    app['cleanup'] = asyncio.create_task(cleanup(app))
+    asyncio.create_task(cron(app))
+    asyncio.create_task(cleanup(app))
 
 
-async def stop_tasks(app):
-    app['monitor'].cancel()
-    await app['monitor']
-    app['cleanup'].cancel()
-    await app['cleanup']
+async def cancel_tasks(app):
+    pending = asyncio.Task.all_tasks()
+    for task in pending:
+        task.cancel()
+        await task
 
 
 if __name__ == '__main__':
@@ -95,5 +98,5 @@ if __name__ == '__main__':
     app['lock'] = asyncio.Lock()
     app.add_routes(routes)
     app.on_startup.append(start_tasks)
-    app.on_cleanup.append(stop_tasks)
+    app.on_cleanup.append(cancel_tasks)
     web.run_app(app)
