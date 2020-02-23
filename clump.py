@@ -96,7 +96,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--keep-records', type=int, default=3600)
     parser.add_argument('--cleanup-interval', type=int, default=60)
-    parser.add_argument('--port', type=int, default=8080)
+    parser.add_argument('--port', type=int, default=8085)
     return parser.parse_args()  # TODO: sanitize input before returning
 
 
