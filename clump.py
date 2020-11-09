@@ -16,7 +16,10 @@ routes = web.RouteTableDef()
 async def handle(request):
     since = request.query.get('since')
     if not since:
-        return web.Response(status=400, text='Missing "since" url parameter')
+        async with request.app['lock']:
+            payload = json.dumps(request.app['resources'])
+        return web.Response(
+            status=200, text=payload, content_type='application/json')
     try:
         since = int(since)
     except ValueError:
@@ -25,7 +28,7 @@ async def handle(request):
     async with request.app['lock']:
         for k, v in request.app['resources'].items():
             if k >= since:
-                raw[k] = copy.deepcopy(v)  # I fear this will be slow
+                raw[k] = copy.deepcopy(v)
     payload = json.dumps(raw)
     return web.Response(
         status=200, text=payload, content_type='application/json')
