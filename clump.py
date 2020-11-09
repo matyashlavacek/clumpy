@@ -35,14 +35,13 @@ async def handle(request):
 
 
 async def cleanup(app):
-    # not the prettiest but does the job
     keep_records = app['args'].keep_records
     cleanup_interval = app['args'].cleanup_interval
     try:
         while True:
             async with app['lock']:
                 if len(app['resources']) > keep_records:
-                    for k, v in app['resources'].copy().items():
+                    for k in app['resources'].copy().keys():
                         if k <= app['info']['latest']-keep_records:
                             del app['resources'][k]
             await asyncio.sleep(cleanup_interval)
