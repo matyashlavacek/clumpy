@@ -1,20 +1,15 @@
 import psutil
 
 
-def avg(x):
-    total = 0.0
-    for item in x:
-        total += item
-    return round(total/len(x)*100)/100
+def avg(collection):
+    return round(sum(collection)/len(collection), 2)
 
 
 def cpu_usage():
     usage = psutil.cpu_percent(interval=None, percpu=True)
     cores = {}
-    index = 0
-    for cpu in usage:
-        cores[index] = cpu
-        index += 1
+    for i, cpu in enumerate(usage):
+        cores[i] = cpu
     return {'avg': avg(usage), 'max': max(usage), 'cores': cores}
 
 
